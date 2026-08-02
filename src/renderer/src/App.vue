@@ -33,6 +33,9 @@ const editingReminderId = ref<number | null>(null)
 const reminders = ref<Reminder[]>(loadReminders())
 const reminderFilter = ref<ReminderFilter>('all')
 const reminderSearchQuery = ref('')
+const isAutoLaunchEnabled = ref(false)
+const isAutoLaunchLoading = ref(true)
+const autoLaunchError = ref('')
 const filteredReminders = computed(() => {
   const searchQuery = reminderSearchQuery.value.trim().toLowerCase()
 
@@ -149,11 +152,37 @@ const checkReminders = (): void => {
   })
 }
 
+const loadAutoLaunch = async (): Promise<void> => {
+  try {
+    isAutoLaunchEnabled.value = await window.api.getAutoLaunch()
+  } catch {
+    autoLaunchError.value = 'Не удалось получить состояние автозапуска'
+  } finally {
+    isAutoLaunchLoading.value = false
+  }
+}
+
+const toggleAutoLaunch = async (): Promise<void> => {
+  const nextValue = !isAutoLaunchEnabled.value
+
+  isAutoLaunchLoading.value = true
+  autoLaunchError.value = ''
+
+  try {
+    isAutoLaunchEnabled.value = await window.api.setAutoLaunch(nextValue)
+  } catch {
+    autoLaunchError.value = 'Не удалось изменить настройку автозапуска'
+  } finally {
+    isAutoLaunchLoading.value = false
+  }
+}
 let reminderCheckInterval: ReturnType<typeof setInterval> | undefined
 
 onMounted(() => {
   checkReminders()
   reminderCheckInterval = setInterval(checkReminders, 1000)
+
+  void loadAutoLaunch()
 })
 
 onUnmounted(() => {
@@ -246,6 +275,35 @@ onUnmounted(() => {
         </button>
         <button type="button" @click="closeForm">Закрыть</button>
       </form>
+      <section class="settings-card">
+        <h2>Настройки</h2>
+
+        <div class="settings-row">
+          <div class="settings-info">
+            <strong>Запускать вместе с Windows</strong>
+            <span>
+              {{ isAutoLaunchEnabled ? 'Автозапуск включён' : 'Автозапуск выключен' }}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            role="switch"
+            class="auto-launch-toggle"
+            :class="{ 'auto-launch-toggle--active': isAutoLaunchEnabled }"
+            :aria-checked="isAutoLaunchEnabled"
+            :disabled="isAutoLaunchLoading"
+            aria-label="Запускать вместе с Windows"
+            @click="toggleAutoLaunch"
+          >
+            <span class="auto-launch-toggle__thumb"></span>
+          </button>
+        </div>
+
+        <p v-if="autoLaunchError" class="settings-error">
+          {{ autoLaunchError }}
+        </p>
+      </section>
     </section>
   </main>
 </template>
@@ -444,5 +502,76 @@ button {
   background-color: #f8fafc;
   color: #64748b;
   text-align: center;
+}
+
+.settings-card {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #f8fafc;
+  text-align: left;
+}
+
+.settings-card h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.settings-info {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-info span {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.auto-launch-toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 50px;
+  height: 28px;
+  padding: 3px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: background-color 0.2s;
+}
+
+.auto-launch-toggle--active {
+  background: #7c3aed;
+}
+
+.auto-launch-toggle__thumb {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 5px rgb(0 0 0 / 20%);
+  transition: transform 0.2s;
+}
+
+.auto-launch-toggle--active .auto-launch-toggle__thumb {
+  transform: translateX(22px);
+}
+
+.auto-launch-toggle:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.settings-error {
+  margin: 12px 0 0;
+  color: #b91c1c;
+  font-size: 14px;
 }
 </style>
