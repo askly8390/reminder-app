@@ -29,6 +29,9 @@ const saveReminder = (): void => {
   reminderTime.value = ''
   isFormOpen.value = false
 }
+const deleteReminder = (id: number): void => {
+  reminders.value = reminders.value.filter((reminder) => reminder.id !== id)
+}
 </script>
 <template>
   <main class="app">
@@ -39,6 +42,7 @@ const saveReminder = (): void => {
         <li v-for="reminder in reminders" :key="reminder.id" class="reminder-item">
           <strong>{{ reminder.title }}</strong>
           <span>{{ reminder.date }} в {{ reminder.time }}</span>
+          <button type="button" @click="deleteReminder(reminder.id)">Удалить</button>
         </li>
       </ul>
 
@@ -147,6 +151,23 @@ button {
   flex-shrink: 0;
   color: #64748b;
   font-size: 14px;
+}
+
+.reminder-item button {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reminder-item button:hover {
+  background: #fecaca;
 }
 
 .reminder-form {
