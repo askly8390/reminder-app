@@ -1,10 +1,32 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
-// Custom APIs for renderer
+type ReminderNotification = {
+  id: number
+  title: string
+  date: string
+  time: string
+}
+
 const api = {
-  showNotification: (reminderTitle: string): void => {
-    ipcRenderer.send('show-notification', reminderTitle)
+  showReminder: (reminder: ReminderNotification): void => {
+    ipcRenderer.send('show-reminder', reminder)
+  },
+
+  completeReminder: (reminderId: number): void => {
+    ipcRenderer.send('complete-reminder', reminderId)
+  },
+
+  onReminderCompleted: (callback: (reminderId: number) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, reminderId: number): void => {
+      callback(reminderId)
+    }
+
+    ipcRenderer.on('reminder-completed', listener)
+
+    return () => {
+      ipcRenderer.removeListener('reminder-completed', listener)
+    }
   },
 
   getAutoLaunch: (): Promise<boolean> => {
