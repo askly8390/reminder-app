@@ -107,6 +107,12 @@ const saveReminder = (): void => {
 }
 
 const deleteReminder = (id: number): void => {
+  const shouldDelete = window.confirm('Удалить это напоминание?')
+
+  if (!shouldDelete) {
+    return
+  }
+
   reminders.value = reminders.value.filter((reminder) => reminder.id !== id)
 }
 
