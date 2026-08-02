@@ -143,12 +143,16 @@ onUnmounted(() => {
   }
 })
 </script>
+
 <template>
   <main class="app">
     <section class="welcome-card">
       <p class="label">REMINDER APP</p>
       <h1>Напоминания</h1>
-      <ul v-if="reminders.length" class="reminder-list">
+
+      <p v-if="filteredReminders.length === 0" class="empty-state">Напоминания не найдены</p>
+
+      <ul v-else class="reminder-list">
         <li
           v-for="reminder in filteredReminders"
           :key="reminder.id"
@@ -156,15 +160,16 @@ onUnmounted(() => {
         >
           <strong>{{ reminder.title }}</strong>
           <span>{{ reminder.date }} в {{ reminder.time }}</span>
+
           <button type="button" @click="toggleReminderCompleted(reminder)">
             {{ reminder.completed ? 'Вернуть в работу' : 'Выполнено' }}
           </button>
+
           <button type="button" @click="editReminder(reminder)">Редактировать</button>
+
           <button type="button" @click="deleteReminder(reminder.id)">Удалить</button>
         </li>
       </ul>
-
-      <p v-else>Здесь будет находиться список созданных напоминаний.</p>
 
       <button type="button" @click="isFormOpen = true">Добавить напоминание</button>
 
@@ -410,5 +415,15 @@ button {
 .reminder-search:focus {
   border-color: #2563eb;
   outline: none;
+}
+
+.empty-state {
+  margin: 16px 0;
+  padding: 24px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background-color: #f8fafc;
+  color: #64748b;
+  text-align: center;
 }
 </style>
