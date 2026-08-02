@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 type Reminder = {
   id: number
   title: string
@@ -7,11 +7,32 @@ type Reminder = {
   time: string
 }
 
+const loadReminders = (): Reminder[] => {
+  const savedReminders = localStorage.getItem('reminders')
+
+  if (!savedReminders) {
+    return []
+  }
+
+  try {
+    return JSON.parse(savedReminders) as Reminder[]
+  } catch {
+    return []
+  }
+}
+
 const isFormOpen = ref(false)
 const reminderTitle = ref('')
 const reminderDate = ref('')
 const reminderTime = ref('')
-const reminders = ref<Reminder[]>([])
+const reminders = ref<Reminder[]>(loadReminders())
+watch(
+  reminders,
+  (newReminders): void => {
+    localStorage.setItem('reminders', JSON.stringify(newReminders))
+  },
+  { deep: true }
+)
 const saveReminder = (): void => {
   if (!reminderTitle.value || !reminderDate.value || !reminderTime.value) {
     return
