@@ -1,7 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, Notification } from 'electron'
 import { join } from 'path'
 import { optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import icon from '../../build/icon.ico?asset'
 
 function createWindow(): void {
   // Create the browser window.
@@ -10,7 +10,7 @@ function createWindow(): void {
     height: 670,
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -45,7 +45,8 @@ ipcMain.on('show-notification', (_event, reminderTitle: string) => {
 
   new Notification({
     title: 'Напоминание',
-    body: reminderTitle
+    body: reminderTitle,
+    icon
   }).show()
 })
 app.whenReady().then(() => {
