@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 type Reminder = {
   id: number
   title: string
   date: string
   time: string
+  notified?: boolean
 }
 
 const loadReminders = (): Reminder[] => {
@@ -42,7 +43,8 @@ const saveReminder = (): void => {
     id: Date.now(),
     title: reminderTitle.value,
     date: reminderDate.value,
-    time: reminderTime.value
+    time: reminderTime.value,
+    notified: false
   })
 
   reminderTitle.value = ''
@@ -53,6 +55,35 @@ const saveReminder = (): void => {
 const deleteReminder = (id: number): void => {
   reminders.value = reminders.value.filter((reminder) => reminder.id !== id)
 }
+const checkReminders = (): void => {
+  const currentTime = Date.now()
+
+  reminders.value.forEach((reminder) => {
+    if (reminder.notified) {
+      return
+    }
+
+    const reminderTime = new Date(`${reminder.date}T${reminder.time}`).getTime()
+
+    if (currentTime >= reminderTime) {
+      window.api.showNotification(reminder.title)
+      reminder.notified = true
+    }
+  })
+}
+
+let reminderCheckInterval: ReturnType<typeof setInterval> | undefined
+
+onMounted(() => {
+  checkReminders()
+  reminderCheckInterval = setInterval(checkReminders, 1000)
+})
+
+onUnmounted(() => {
+  if (reminderCheckInterval) {
+    clearInterval(reminderCheckInterval)
+  }
+})
 </script>
 <template>
   <main class="app">

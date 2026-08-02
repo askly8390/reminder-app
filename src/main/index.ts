@@ -1,6 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Notification } from 'electron'
 import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
 function createWindow(): void {
@@ -38,9 +38,19 @@ function createWindow(): void {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
+ipcMain.on('show-notification', (_event, reminderTitle: string) => {
+  if (!Notification.isSupported()) {
+    return
+  }
+
+  new Notification({
+    title: 'Напоминание',
+    body: reminderTitle
+  }).show()
+})
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  app.setAppUserModelId(process.execPath)
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
