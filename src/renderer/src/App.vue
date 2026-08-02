@@ -18,7 +18,7 @@
   padding: 32px;
   background: #f3f4f6;
   color: #1f2937;
-  font-family: "Segoe UI", sans-serif;
+  font-family: 'Segoe UI', sans-serif;
 }
 
 .welcome-card {
