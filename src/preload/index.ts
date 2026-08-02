@@ -5,12 +5,17 @@ import { electronAPI } from '@electron-toolkit/preload'
 const api = {
   showNotification: (reminderTitle: string): void => {
     ipcRenderer.send('show-notification', reminderTitle)
+  },
+
+  getAutoLaunch: (): Promise<boolean> => {
+    return ipcRenderer.invoke('get-auto-launch')
+  },
+
+  setAutoLaunch: (enabled: boolean): Promise<boolean> => {
+    return ipcRenderer.invoke('set-auto-launch', enabled)
   }
 }
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)

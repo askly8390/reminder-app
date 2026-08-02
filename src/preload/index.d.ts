@@ -5,6 +5,8 @@ declare global {
     electron: ElectronAPI
     api: {
       showNotification: (reminderTitle: string) => void
+      getAutoLaunch: () => Promise<boolean>
+      setAutoLaunch: (enabled: boolean) => Promise<boolean>
     }
   }
 }

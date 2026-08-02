@@ -7,6 +7,30 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 const shouldStartHidden = process.argv.includes('--hidden')
+function getAutoLaunch(): boolean {
+  if (process.platform !== 'win32' || !app.isPackaged) {
+    return false
+  }
+
+  return app.getLoginItemSettings({
+    path: process.execPath,
+    args: ['--hidden']
+  }).openAtLogin
+}
+
+function setAutoLaunch(enabled: boolean): boolean {
+  if (process.platform !== 'win32' || !app.isPackaged) {
+    return false
+  }
+
+  app.setLoginItemSettings({
+    openAtLogin: enabled,
+    path: process.execPath,
+    args: ['--hidden']
+  })
+
+  return getAutoLaunch()
+}
 
 function showMainWindow(): void {
   if (!mainWindow) {
@@ -97,7 +121,13 @@ ipcMain.on('show-notification', (_event, reminderTitle: string) => {
   if (!Notification.isSupported()) {
     return
   }
+  ipcMain.handle('get-auto-launch', () => {
+    return getAutoLaunch()
+  })
 
+  ipcMain.handle('set-auto-launch', (_event, enabled: boolean) => {
+    return setAutoLaunch(enabled)
+  })
   new Notification({
     title: 'Напоминание',
     body: reminderTitle,
