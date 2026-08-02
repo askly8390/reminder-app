@@ -36,17 +36,26 @@ const reminderSearchQuery = ref('')
 const filteredReminders = computed(() => {
   const searchQuery = reminderSearchQuery.value.trim().toLowerCase()
 
-  return reminders.value.filter((reminder) => {
-    const matchesFilter =
-      reminderFilter.value === 'all' ||
-      (reminderFilter.value === 'active' && !reminder.completed) ||
-      (reminderFilter.value === 'completed' && reminder.completed)
+  return [...reminders.value]
+    .filter((reminder) => {
+      const matchesFilter =
+        reminderFilter.value === 'all' ||
+        (reminderFilter.value === 'active' && !reminder.completed) ||
+        (reminderFilter.value === 'completed' && reminder.completed)
 
-    const matchesSearch = reminder.title.toLowerCase().includes(searchQuery)
+      const matchesSearch = reminder.title.toLowerCase().includes(searchQuery)
 
-    return matchesFilter && matchesSearch
-  })
+      return matchesFilter && matchesSearch
+    })
+    .sort((firstReminder, secondReminder) => {
+      const firstDateTime = new Date(`${firstReminder.date}T${firstReminder.time}`).getTime()
+
+      const secondDateTime = new Date(`${secondReminder.date}T${secondReminder.time}`).getTime()
+
+      return firstDateTime - secondDateTime
+    })
 })
+
 watch(
   reminders,
   (newReminders): void => {
