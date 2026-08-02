@@ -26,6 +26,7 @@ const isFormOpen = ref(false)
 const reminderTitle = ref('')
 const reminderDate = ref('')
 const reminderTime = ref('')
+const editingReminderId = ref<number | null>(null)
 const reminders = ref<Reminder[]>(loadReminders())
 watch(
   reminders,
@@ -34,27 +35,51 @@ watch(
   },
   { deep: true }
 )
-const saveReminder = (): void => {
-  if (!reminderTitle.value || !reminderDate.value || !reminderTime.value) {
-    return
-  }
-
-  reminders.value.push({
-    id: Date.now(),
-    title: reminderTitle.value,
-    date: reminderDate.value,
-    time: reminderTime.value,
-    notified: false
-  })
-
+const closeForm = (): void => {
+  editingReminderId.value = null
   reminderTitle.value = ''
   reminderDate.value = ''
   reminderTime.value = ''
   isFormOpen.value = false
 }
+const saveReminder = (): void => {
+  if (!reminderTitle.value || !reminderDate.value || !reminderTime.value) {
+    return
+  }
+
+  if (editingReminderId.value !== null) {
+    const reminder = reminders.value.find((item) => item.id === editingReminderId.value)
+
+    if (reminder) {
+      reminder.title = reminderTitle.value
+      reminder.date = reminderDate.value
+      reminder.time = reminderTime.value
+      reminder.notified = false
+    }
+  } else {
+    reminders.value.push({
+      id: Date.now(),
+      title: reminderTitle.value,
+      date: reminderDate.value,
+      time: reminderTime.value,
+      notified: false
+    })
+  }
+  closeForm()
+}
+
 const deleteReminder = (id: number): void => {
   reminders.value = reminders.value.filter((reminder) => reminder.id !== id)
 }
+
+const editReminder = (reminder: Reminder): void => {
+  editingReminderId.value = reminder.id
+  reminderTitle.value = reminder.title
+  reminderDate.value = reminder.date
+  reminderTime.value = reminder.time
+  isFormOpen.value = true
+}
+
 const checkReminders = (): void => {
   const currentTime = Date.now()
 
@@ -94,6 +119,7 @@ onUnmounted(() => {
         <li v-for="reminder in reminders" :key="reminder.id" class="reminder-item">
           <strong>{{ reminder.title }}</strong>
           <span>{{ reminder.date }} в {{ reminder.time }}</span>
+          <button type="button" @click="editReminder(reminder)">Редактировать</button>
           <button type="button" @click="deleteReminder(reminder.id)">Удалить</button>
         </li>
       </ul>
@@ -102,8 +128,10 @@ onUnmounted(() => {
 
       <button type="button" @click="isFormOpen = true">Добавить напоминание</button>
 
-      <div v-if="isFormOpen" class="reminder-form">
-        <h2>Новое напоминание</h2>
+      <form v-if="isFormOpen" class="reminder-form" @submit.prevent="saveReminder">
+        <h2>
+          {{ editingReminderId !== null ? 'Редактирование напоминания' : 'Новое напоминание' }}
+        </h2>
 
         <label for="reminder-title">Название</label>
         <input
@@ -118,9 +146,11 @@ onUnmounted(() => {
         <label for="reminder-time">Время</label>
         <input id="reminder-time" v-model="reminderTime" type="time" />
 
-        <button type="button" @click="saveReminder">Сохранить</button>
-        <button type="button" @click="isFormOpen = false">Закрыть</button>
-      </div>
+        <button type="submit">
+          {{ editingReminderId !== null ? 'Сохранить' : 'Добавить' }}
+        </button>
+        <button type="button" @click="closeForm">Закрыть</button>
+      </form>
     </section>
   </main>
 </template>
