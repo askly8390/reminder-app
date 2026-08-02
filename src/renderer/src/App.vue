@@ -1,11 +1,70 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+type Reminder = {
+  id: number
+  title: string
+  date: string
+  time: string
+}
+
+const isFormOpen = ref(false)
+const reminderTitle = ref('')
+const reminderDate = ref('')
+const reminderTime = ref('')
+const reminders = ref<Reminder[]>([])
+const saveReminder = (): void => {
+  if (!reminderTitle.value || !reminderDate.value || !reminderTime.value) {
+    return
+  }
+
+  reminders.value.push({
+    id: Date.now(),
+    title: reminderTitle.value,
+    date: reminderDate.value,
+    time: reminderTime.value
+  })
+
+  reminderTitle.value = ''
+  reminderDate.value = ''
+  reminderTime.value = ''
+  isFormOpen.value = false
+}
+</script>
 <template>
   <main class="app">
     <section class="welcome-card">
       <p class="label">REMINDER APP</p>
       <h1>Напоминания</h1>
-      <p>Здесь будет находиться список созданных напоминаний.</p>
+      <ul v-if="reminders.length" class="reminder-list">
+        <li v-for="reminder in reminders" :key="reminder.id" class="reminder-item">
+          <strong>{{ reminder.title }}</strong>
+          <span>{{ reminder.date }} в {{ reminder.time }}</span>
+        </li>
+      </ul>
 
-      <button type="button">Добавить напоминание</button>
+      <p v-else>Здесь будет находиться список созданных напоминаний.</p>
+
+      <button type="button" @click="isFormOpen = true">Добавить напоминание</button>
+
+      <div v-if="isFormOpen" class="reminder-form">
+        <h2>Новое напоминание</h2>
+
+        <label for="reminder-title">Название</label>
+        <input
+          id="reminder-title"
+          v-model="reminderTitle"
+          type="text"
+          placeholder="Например: позвонить врачу"
+        />
+        <label for="reminder-date">Дата</label>
+        <input id="reminder-date" v-model="reminderDate" type="date" />
+
+        <label for="reminder-time">Время</label>
+        <input id="reminder-time" v-model="reminderTime" type="time" />
+
+        <button type="button" @click="saveReminder">Сохранить</button>
+        <button type="button" @click="isFormOpen = false">Закрыть</button>
+      </div>
     </section>
   </main>
 </template>
@@ -59,5 +118,83 @@ button {
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+}
+.reminder-list {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 24px;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.reminder-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.reminder-item strong {
+  overflow-wrap: anywhere;
+}
+
+.reminder-item span {
+  flex-shrink: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.reminder-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #f8fafc;
+  text-align: left;
+}
+
+.reminder-form h2 {
+  margin: 0 0 8px;
+  text-align: center;
+}
+
+.reminder-form label {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.reminder-form input {
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: white;
+  color: #172033;
+  font: inherit;
+}
+
+.reminder-form input:focus {
+  border-color: #7c3aed;
+  outline: 3px solid #ede9fe;
+}
+
+.reminder-form button {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.reminder-form button + button {
+  margin-top: 0;
+  background: #e2e8f0;
+  color: #334155;
 }
 </style>
