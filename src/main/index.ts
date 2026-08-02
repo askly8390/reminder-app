@@ -7,6 +7,7 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 const shouldStartHidden = process.argv.includes('--hidden')
+const AUTO_LAUNCH_ARGS = ['--hidden']
 function getAutoLaunch(): boolean {
   if (process.platform !== 'win32' || !app.isPackaged) {
     return false
@@ -14,7 +15,7 @@ function getAutoLaunch(): boolean {
 
   return app.getLoginItemSettings({
     path: process.execPath,
-    args: ['--hidden']
+    args: AUTO_LAUNCH_ARGS
   }).openAtLogin
 }
 
@@ -23,10 +24,20 @@ function setAutoLaunch(enabled: boolean): boolean {
     return false
   }
 
+  // Удаляем запись с отдельным именем,
+  // которую создали во время предыдущих попыток
+  app.setLoginItemSettings({
+    openAtLogin: false,
+    path: process.execPath,
+    args: AUTO_LAUNCH_ARGS,
+    name: 'reminder-app'
+  })
+
+  // Создаём или удаляем единственную основную запись
   app.setLoginItemSettings({
     openAtLogin: enabled,
     path: process.execPath,
-    args: ['--hidden']
+    args: AUTO_LAUNCH_ARGS
   })
 
   return getAutoLaunch()
@@ -117,17 +128,19 @@ function createWindow(): void {
   }
 }
 
+ipcMain.handle('get-auto-launch', () => {
+  return getAutoLaunch()
+})
+
+ipcMain.handle('set-auto-launch', (_event, enabled: boolean) => {
+  return setAutoLaunch(enabled)
+})
+
 ipcMain.on('show-notification', (_event, reminderTitle: string) => {
   if (!Notification.isSupported()) {
     return
   }
-  ipcMain.handle('get-auto-launch', () => {
-    return getAutoLaunch()
-  })
 
-  ipcMain.handle('set-auto-launch', (_event, enabled: boolean) => {
-    return setAutoLaunch(enabled)
-  })
   new Notification({
     title: 'Напоминание',
     body: reminderTitle,
@@ -137,13 +150,6 @@ ipcMain.on('show-notification', (_event, reminderTitle: string) => {
 
 app.whenReady().then(() => {
   app.setAppUserModelId(process.execPath)
-  if (process.platform === 'win32' && app.isPackaged) {
-    app.setLoginItemSettings({
-      openAtLogin: true,
-      path: process.execPath,
-      args: ['--hidden']
-    })
-  }
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })

@@ -155,8 +155,10 @@ const checkReminders = (): void => {
 const loadAutoLaunch = async (): Promise<void> => {
   try {
     isAutoLaunchEnabled.value = await window.api.getAutoLaunch()
-  } catch {
-    autoLaunchError.value = 'Не удалось получить состояние автозапуска'
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+
+    autoLaunchError.value = `Не удалось изменить настройку автозапуска: ${message}`
   } finally {
     isAutoLaunchLoading.value = false
   }
