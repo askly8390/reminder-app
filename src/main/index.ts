@@ -6,6 +6,7 @@ import icon from '../../build/icon.ico?asset'
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
+const shouldStartHidden = process.argv.includes('--hidden')
 
 function showMainWindow(): void {
   if (!mainWindow) {
@@ -64,7 +65,9 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
+    if (!shouldStartHidden) {
+      mainWindow?.show()
+    }
   })
 
   mainWindow.on('close', (event) => {
@@ -104,7 +107,13 @@ ipcMain.on('show-notification', (_event, reminderTitle: string) => {
 
 app.whenReady().then(() => {
   app.setAppUserModelId(process.execPath)
-
+  if (process.platform === 'win32' && app.isPackaged) {
+    app.setLoginItemSettings({
+      openAtLogin: true,
+      path: process.execPath,
+      args: ['--hidden']
+    })
+  }
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
