@@ -48,6 +48,10 @@ const filteredReminders = computed(() => {
       return matchesFilter && matchesSearch
     })
     .sort((firstReminder, secondReminder) => {
+      if (firstReminder.completed !== secondReminder.completed) {
+        return firstReminder.completed ? 1 : -1
+      }
+
       const firstDateTime = new Date(`${firstReminder.date}T${firstReminder.time}`).getTime()
 
       const secondDateTime = new Date(`${secondReminder.date}T${secondReminder.time}`).getTime()
