@@ -208,16 +208,23 @@ onUnmounted(() => {
           :key="reminder.id"
           :class="['reminder-item', { 'reminder-item--completed': reminder.completed }]"
         >
-          <strong>{{ reminder.title }}</strong>
-          <span>{{ reminder.date }} в {{ reminder.time }}</span>
+          <div class="reminder-info">
+            <strong class="reminder-title">
+              {{ reminder.title }}
+            </strong>
 
-          <button type="button" @click="toggleReminderCompleted(reminder)">
-            {{ reminder.completed ? 'Вернуть в работу' : 'Выполнено' }}
-          </button>
+            <span class="reminder-date"> {{ reminder.date }} в {{ reminder.time }} </span>
+          </div>
 
-          <button type="button" @click="editReminder(reminder)">Редактировать</button>
+          <div class="reminder-actions">
+            <button type="button" @click="toggleReminderCompleted(reminder)">
+              {{ reminder.completed ? 'Вернуть в работу' : 'Выполнено' }}
+            </button>
 
-          <button type="button" @click="deleteReminder(reminder.id)">Удалить</button>
+            <button type="button" @click="editReminder(reminder)">Редактировать</button>
+
+            <button type="button" @click="deleteReminder(reminder.id)">Удалить</button>
+          </div>
         </li>
       </ul>
 
@@ -313,9 +320,11 @@ onUnmounted(() => {
 <style scoped>
 .app {
   min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 32px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(12px, 4vw, 32px);
+  box-sizing: border-box;
   background: #f3f4f6;
   color: #1f2937;
   font-family: 'Segoe UI', sans-serif;
@@ -323,8 +332,10 @@ onUnmounted(() => {
 
 .welcome-card {
   width: 100%;
-  max-width: 520px;
-  padding: 40px;
+  max-width: 960px;
+  min-width: 0;
+  padding: clamp(20px, 4vw, 40px);
+  box-sizing: border-box;
   border-radius: 20px;
   background: #ffffff;
   box-shadow: 0 16px 40px rgb(0 0 0 / 10%);
@@ -370,28 +381,45 @@ button {
 }
 
 .reminder-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
+  gap: 16px 24px;
+  padding: 16px;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #f8fafc;
 }
 
-.reminder-item strong {
-  overflow-wrap: anywhere;
+.reminder-info {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
 }
 
-.reminder-item span {
-  flex-shrink: 0;
+.reminder-title {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 16px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.reminder-date {
   color: #64748b;
   font-size: 14px;
 }
 
-.reminder-item button {
-  flex-shrink: 0;
+.reminder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.reminder-actions button {
+  flex: 0 0 auto;
   padding: 8px 12px;
   border: none;
   border-radius: 8px;
@@ -400,6 +428,7 @@ button {
   font: inherit;
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -575,5 +604,44 @@ button {
   margin: 12px 0 0;
   color: #b91c1c;
   font-size: 14px;
+}
+
+.reminder-filters {
+  flex-wrap: wrap;
+}
+
+.reminder-filters button {
+  flex: 1 1 120px;
+}
+
+.reminder-search {
+  box-sizing: border-box;
+}
+
+@media (max-width: 700px) {
+  .reminder-item {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .reminder-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .welcome-card {
+    padding: 20px 16px;
+    border-radius: 16px;
+  }
+
+  .reminder-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reminder-actions button {
+    width: 100%;
+  }
 }
 </style>

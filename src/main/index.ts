@@ -90,13 +90,10 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
-    show: false,
-    autoHideMenuBar: true,
-    icon,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
-    }
+    minWidth: 420,
+    minHeight: 560,
+    show: false
+    // остальное без изменений
   })
 
   mainWindow.on('ready-to-show', () => {
