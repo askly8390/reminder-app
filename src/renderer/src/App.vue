@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 type Reminder = {
   id: number
   title: string
@@ -8,6 +8,8 @@ type Reminder = {
   notified?: boolean
   completed?: boolean
 }
+
+type ReminderFilter = 'all' | 'active' | 'completed'
 
 const loadReminders = (): Reminder[] => {
   const savedReminders = localStorage.getItem('reminders')
@@ -29,6 +31,18 @@ const reminderDate = ref('')
 const reminderTime = ref('')
 const editingReminderId = ref<number | null>(null)
 const reminders = ref<Reminder[]>(loadReminders())
+const reminderFilter = ref<ReminderFilter>('all')
+const filteredReminders = computed(() => {
+  if (reminderFilter.value === 'active') {
+    return reminders.value.filter((reminder) => !reminder.completed)
+  }
+
+  if (reminderFilter.value === 'completed') {
+    return reminders.value.filter((reminder) => reminder.completed)
+  }
+
+  return reminders.value
+})
 watch(
   reminders,
   (newReminders): void => {
@@ -123,7 +137,7 @@ onUnmounted(() => {
       <h1>Напоминания</h1>
       <ul v-if="reminders.length" class="reminder-list">
         <li
-          v-for="reminder in reminders"
+          v-for="reminder in filteredReminders"
           :key="reminder.id"
           :class="['reminder-item', { 'reminder-item--completed': reminder.completed }]"
         >
@@ -140,6 +154,32 @@ onUnmounted(() => {
       <p v-else>Здесь будет находиться список созданных напоминаний.</p>
 
       <button type="button" @click="isFormOpen = true">Добавить напоминание</button>
+
+      <div class="reminder-filters">
+        <button
+          type="button"
+          :class="{ active: reminderFilter === 'all' }"
+          @click="reminderFilter = 'all'"
+        >
+          Все
+        </button>
+
+        <button
+          type="button"
+          :class="{ active: reminderFilter === 'active' }"
+          @click="reminderFilter = 'active'"
+        >
+          Активные
+        </button>
+
+        <button
+          type="button"
+          :class="{ active: reminderFilter === 'completed' }"
+          @click="reminderFilter = 'completed'"
+        >
+          Выполненные
+        </button>
+      </div>
 
       <form v-if="isFormOpen" class="reminder-form" @submit.prevent="saveReminder">
         <h2>
@@ -322,5 +362,21 @@ button {
 .reminder-item--completed strong {
   color: #64748b;
   text-decoration: line-through;
+}
+
+.reminder-filters {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.reminder-filters button {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+.reminder-filters button.active {
+  background-color: #2563eb;
+  color: #ffffff;
 }
 </style>
