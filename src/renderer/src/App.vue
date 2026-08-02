@@ -75,6 +75,14 @@ const saveReminder = (): void => {
     return
   }
 
+  const reminderDateTime = new Date(`${reminderDate.value}T${reminderTime.value}`)
+  const reminderTimestamp = reminderDateTime.getTime()
+
+  if (Number.isNaN(reminderTimestamp) || reminderTimestamp <= Date.now()) {
+    window.alert('Выберите будущие дату и время')
+    return
+  }
+
   if (editingReminderId.value !== null) {
     const reminder = reminders.value.find((item) => item.id === editingReminderId.value)
 
@@ -94,6 +102,7 @@ const saveReminder = (): void => {
       completed: false
     })
   }
+
   closeForm()
 }
 
