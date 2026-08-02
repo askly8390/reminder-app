@@ -32,16 +32,20 @@ const reminderTime = ref('')
 const editingReminderId = ref<number | null>(null)
 const reminders = ref<Reminder[]>(loadReminders())
 const reminderFilter = ref<ReminderFilter>('all')
+const reminderSearchQuery = ref('')
 const filteredReminders = computed(() => {
-  if (reminderFilter.value === 'active') {
-    return reminders.value.filter((reminder) => !reminder.completed)
-  }
+  const searchQuery = reminderSearchQuery.value.trim().toLowerCase()
 
-  if (reminderFilter.value === 'completed') {
-    return reminders.value.filter((reminder) => reminder.completed)
-  }
+  return reminders.value.filter((reminder) => {
+    const matchesFilter =
+      reminderFilter.value === 'all' ||
+      (reminderFilter.value === 'active' && !reminder.completed) ||
+      (reminderFilter.value === 'completed' && reminder.completed)
 
-  return reminders.value
+    const matchesSearch = reminder.title.toLowerCase().includes(searchQuery)
+
+    return matchesFilter && matchesSearch
+  })
 })
 watch(
   reminders,
@@ -180,7 +184,12 @@ onUnmounted(() => {
           Выполненные
         </button>
       </div>
-
+      <input
+        v-model.trim="reminderSearchQuery"
+        class="reminder-search"
+        type="search"
+        placeholder="Поиск напоминаний"
+      />
       <form v-if="isFormOpen" class="reminder-form" @submit.prevent="saveReminder">
         <h2>
           {{ editingReminderId !== null ? 'Редактирование напоминания' : 'Новое напоминание' }}
@@ -378,5 +387,19 @@ button {
 .reminder-filters button.active {
   background-color: #2563eb;
   color: #ffffff;
+}
+
+.reminder-search {
+  width: 100%;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.reminder-search:focus {
+  border-color: #2563eb;
+  outline: none;
 }
 </style>
