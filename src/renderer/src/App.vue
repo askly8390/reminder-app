@@ -6,6 +6,7 @@ type Reminder = {
   date: string
   time: string
   notified?: boolean
+  completed?: boolean
 }
 
 const loadReminders = (): Reminder[] => {
@@ -62,7 +63,8 @@ const saveReminder = (): void => {
       title: reminderTitle.value,
       date: reminderDate.value,
       time: reminderTime.value,
-      notified: false
+      notified: false,
+      completed: false
     })
   }
   closeForm()
@@ -70,6 +72,10 @@ const saveReminder = (): void => {
 
 const deleteReminder = (id: number): void => {
   reminders.value = reminders.value.filter((reminder) => reminder.id !== id)
+}
+
+const toggleReminderCompleted = (reminder: Reminder): void => {
+  reminder.completed = !reminder.completed
 }
 
 const editReminder = (reminder: Reminder): void => {
@@ -84,7 +90,7 @@ const checkReminders = (): void => {
   const currentTime = Date.now()
 
   reminders.value.forEach((reminder) => {
-    if (reminder.notified) {
+    if (reminder.notified || reminder.completed) {
       return
     }
 
@@ -116,9 +122,16 @@ onUnmounted(() => {
       <p class="label">REMINDER APP</p>
       <h1>Напоминания</h1>
       <ul v-if="reminders.length" class="reminder-list">
-        <li v-for="reminder in reminders" :key="reminder.id" class="reminder-item">
+        <li
+          v-for="reminder in reminders"
+          :key="reminder.id"
+          :class="['reminder-item', { 'reminder-item--completed': reminder.completed }]"
+        >
           <strong>{{ reminder.title }}</strong>
           <span>{{ reminder.date }} в {{ reminder.time }}</span>
+          <button type="button" @click="toggleReminderCompleted(reminder)">
+            {{ reminder.completed ? 'Вернуть в работу' : 'Выполнено' }}
+          </button>
           <button type="button" @click="editReminder(reminder)">Редактировать</button>
           <button type="button" @click="deleteReminder(reminder.id)">Удалить</button>
         </li>
@@ -299,5 +312,15 @@ button {
   margin-top: 0;
   background: #e2e8f0;
   color: #334155;
+}
+
+.reminder-item--completed {
+  opacity: 0.65;
+  background-color: #f0fdf4;
+}
+
+.reminder-item--completed strong {
+  color: #64748b;
+  text-decoration: line-through;
 }
 </style>
