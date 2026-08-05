@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 type ReminderRepeat = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
 
@@ -16,6 +16,17 @@ type Reminder = {
 }
 
 type ReminderFilter = 'all' | 'active' | 'completed'
+
+type UpdateState =
+  'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'
+
+type UpdateStatus = {
+  state: UpdateState
+  currentVersion: string
+  availableVersion?: string
+  percent?: number
+  message?: string
+}
 
 const repeatLabels: Record<ReminderRepeat, string> = {
   none: 'Не повторять',
@@ -211,7 +222,7 @@ const completeNotificationReminder = (event: Event): void => {
   window.api.completeReminder(notificationReminder.id)
 }
 
-const loadReminders = (): Reminder[] => {
+const loadLegacyReminders = (): Reminder[] => {
   const savedReminders = localStorage.getItem('reminders')
 
   if (!savedReminders) {
@@ -219,13 +230,38 @@ const loadReminders = (): Reminder[] => {
   }
 
   try {
-    return JSON.parse(savedReminders) as Reminder[]
+    const parsedReminders: unknown = JSON.parse(savedReminders)
+
+    return Array.isArray(parsedReminders) ? (parsedReminders as Reminder[]) : []
   } catch {
     return []
   }
 }
 
+const mergeReminderStores = (
+  storedReminders: Reminder[],
+  legacyReminders: Reminder[]
+): { reminders: Reminder[]; restoredCount: number } => {
+  const reminders = [...storedReminders]
+  const knownReminderIds = new Set(storedReminders.map((reminder) => reminder.id))
+
+  for (const legacyReminder of legacyReminders) {
+    if (knownReminderIds.has(legacyReminder.id)) {
+      continue
+    }
+
+    reminders.push(legacyReminder)
+    knownReminderIds.add(legacyReminder.id)
+  }
+
+  return {
+    reminders,
+    restoredCount: reminders.length - storedReminders.length
+  }
+}
+
 const isFormOpen = ref(false)
+const reminderTitleInput = ref<HTMLInputElement | null>(null)
 const reminderTitle = ref('')
 const reminderDate = ref('')
 const reminderTime = ref('')
@@ -238,7 +274,11 @@ const editingOriginalRepeat = ref<ReminderRepeat>('none')
 
 const editingReminderId = ref<number | null>(null)
 
-const reminders = ref<Reminder[]>(loadReminders())
+const reminders = ref<Reminder[]>([])
+const isReminderStorageLoading = ref(true)
+const isReminderStorageReady = ref(false)
+const reminderStorageError = ref('')
+const reminderStorageNotice = ref('')
 
 const reminderFilter = ref<ReminderFilter>('all')
 
@@ -246,6 +286,45 @@ const reminderSearchQuery = ref('')
 const isAutoLaunchEnabled = ref(false)
 const isAutoLaunchLoading = ref(true)
 const autoLaunchError = ref('')
+const updateStatus = ref<UpdateStatus>({
+  state: 'idle',
+  currentVersion: '1.2.1'
+})
+const updateActionError = ref('')
+
+const updateStatusText = computed(() => {
+  const status = updateStatus.value
+
+  if (status.state === 'checking') {
+    return 'Проверяем наличие новой версии...'
+  }
+
+  if (status.state === 'available') {
+    return `Доступна версия ${status.availableVersion ?? ''}`.trim()
+  }
+
+  if (status.state === 'downloading') {
+    return `Загрузка обновления: ${Math.round(status.percent ?? 0)}%`
+  }
+
+  if (status.state === 'downloaded') {
+    return `Версия ${status.availableVersion ?? ''} готова к установке`.trim()
+  }
+
+  if (status.state === 'up-to-date') {
+    return 'Установлена последняя версия'
+  }
+
+  if (status.state === 'error') {
+    return 'Не удалось проверить обновления'
+  }
+
+  if (status.message) {
+    return status.message
+  }
+
+  return 'Обновления проверяются автоматически'
+})
 
 const filteredReminders = computed(() => {
   const searchQuery = reminderSearchQuery.value.trim().toLowerCase()
@@ -277,10 +356,90 @@ const filteredReminders = computed(() => {
 watch(
   reminders,
   (newReminders): void => {
-    localStorage.setItem('reminders', JSON.stringify(newReminders))
+    if (!isReminderStorageReady.value) {
+      return
+    }
+
+    const remindersSnapshot = newReminders.map((reminder) => ({
+      ...reminder,
+      repeatWeekdays: reminder.repeatWeekdays ? [...reminder.repeatWeekdays] : undefined
+    }))
+
+    void window.api
+      .saveReminders(remindersSnapshot)
+      .then(() => {
+        reminderStorageError.value = ''
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+
+        reminderStorageError.value = `Не удалось сохранить напоминания: ${message}`
+      })
   },
   { deep: true }
 )
+
+const loadReminderStorage = async (): Promise<void> => {
+  const legacyReminders = loadLegacyReminders()
+
+  try {
+    const storedData = await window.api.loadReminders()
+
+    if (storedData.initialized) {
+      const mergedStore = mergeReminderStores(storedData.reminders, legacyReminders)
+
+      reminders.value = mergedStore.reminders
+
+      if (legacyReminders.length > 0) {
+        await window.api.saveReminders(mergedStore.reminders)
+        localStorage.removeItem('reminders')
+      }
+
+      if (storedData.recoveredFromBackup) {
+        reminderStorageNotice.value = 'Данные восстановлены из резервной копии'
+      }
+
+      if (mergedStore.restoredCount > 0) {
+        const recoveryNotice = `Восстановлено напоминаний из версии 1.1.0: ${mergedStore.restoredCount}`
+
+        reminderStorageNotice.value = reminderStorageNotice.value
+          ? `${reminderStorageNotice.value}. ${recoveryNotice}`
+          : recoveryNotice
+      }
+    } else {
+      reminders.value = legacyReminders
+      await window.api.saveReminders(legacyReminders)
+      localStorage.removeItem('reminders')
+
+      if (legacyReminders.length > 0) {
+        reminderStorageNotice.value = 'Существующие напоминания перенесены в новое хранилище'
+      }
+    }
+
+    await nextTick()
+    isReminderStorageReady.value = true
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+
+    reminders.value = legacyReminders
+    reminderStorageError.value =
+      `Не удалось открыть хранилище напоминаний: ${message}. ` +
+      'Добавление и изменение временно отключены.'
+  } finally {
+    isReminderStorageLoading.value = false
+  }
+}
+
+const focusReminderTitle = async (): Promise<void> => {
+  await nextTick()
+  reminderTitleInput.value?.focus()
+}
+
+const openNewReminderForm = (): void => {
+  closeForm()
+  isFormOpen.value = true
+  void focusReminderTitle()
+}
 
 const closeForm = (): void => {
   editingReminderId.value = null
@@ -403,9 +562,14 @@ const editReminder = (reminder: Reminder): void => {
   reminderWeekdays.value =
     getReminderRepeat(reminder) === 'weekly' ? getReminderWeekdays(reminder) : []
   isFormOpen.value = true
+  void focusReminderTitle()
 }
 
 const checkReminders = (): void => {
+  if (!isReminderStorageReady.value || isFormOpen.value) {
+    return
+  }
+
   const currentTime = Date.now()
 
   reminders.value.forEach((reminder) => {
@@ -453,9 +617,48 @@ const toggleAutoLaunch = async (): Promise<void> => {
   }
 }
 
+const loadUpdateStatus = async (): Promise<void> => {
+  try {
+    updateStatus.value = await window.api.getUpdateStatus()
+  } catch (error) {
+    updateActionError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+const checkForUpdates = async (): Promise<void> => {
+  updateActionError.value = ''
+
+  try {
+    await window.api.checkForUpdates()
+  } catch (error) {
+    updateActionError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+const downloadUpdate = async (): Promise<void> => {
+  updateActionError.value = ''
+
+  try {
+    await window.api.downloadUpdate()
+  } catch (error) {
+    updateActionError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+const installUpdate = async (): Promise<void> => {
+  updateActionError.value = ''
+
+  try {
+    await window.api.installUpdate()
+  } catch (error) {
+    updateActionError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
 let reminderCheckInterval: ReturnType<typeof setInterval> | null = null
 
 let removeReminderCompletedListener: (() => void) | null = null
+let removeUpdateStatusListener: (() => void) | null = null
 
 onMounted(() => {
   if (isNotificationMode) {
@@ -470,11 +673,19 @@ onMounted(() => {
     }
   })
 
-  checkReminders()
+  removeUpdateStatusListener = window.api.onUpdateStatus((status) => {
+    updateStatus.value = status
+    updateActionError.value = ''
+  })
+
+  void loadReminderStorage().then(() => {
+    checkReminders()
+  })
 
   reminderCheckInterval = setInterval(checkReminders, 1000)
 
   void loadAutoLaunch()
+  void loadUpdateStatus()
 })
 
 onUnmounted(() => {
@@ -486,6 +697,9 @@ onUnmounted(() => {
 
   removeReminderCompletedListener?.()
   removeReminderCompletedListener = null
+
+  removeUpdateStatusListener?.()
+  removeUpdateStatusListener = null
 })
 </script>
 
@@ -522,7 +736,9 @@ onUnmounted(() => {
 
       <h1>Напоминания</h1>
 
-      <p v-if="filteredReminders.length === 0" class="empty-state">Напоминания не найдены</p>
+      <p v-if="isReminderStorageLoading" class="empty-state">Загрузка напоминаний...</p>
+
+      <p v-else-if="filteredReminders.length === 0" class="empty-state">Напоминания не найдены</p>
 
       <ul v-else class="reminder-list">
         <li
@@ -552,18 +768,36 @@ onUnmounted(() => {
           </div>
 
           <div class="reminder-actions">
-            <button type="button" @click="toggleReminderCompleted(reminder)">
+            <button
+              type="button"
+              :disabled="!isReminderStorageReady"
+              @click="toggleReminderCompleted(reminder)"
+            >
               {{ reminder.completed ? 'Вернуть в работу' : 'Выполнено' }}
             </button>
 
-            <button type="button" @click="editReminder(reminder)">Редактировать</button>
+            <button
+              type="button"
+              :disabled="!isReminderStorageReady"
+              @click="editReminder(reminder)"
+            >
+              Редактировать
+            </button>
 
-            <button type="button" @click="deleteReminder(reminder.id)">Удалить</button>
+            <button
+              type="button"
+              :disabled="!isReminderStorageReady"
+              @click="deleteReminder(reminder.id)"
+            >
+              Удалить
+            </button>
           </div>
         </li>
       </ul>
 
-      <button type="button" @click="isFormOpen = true">Добавить напоминание</button>
+      <button type="button" :disabled="!isReminderStorageReady" @click="openNewReminderForm">
+        Добавить напоминание
+      </button>
 
       <div class="reminder-filters">
         <button
@@ -604,7 +838,11 @@ onUnmounted(() => {
         placeholder="Поиск напоминаний"
       />
 
-      <form v-if="isFormOpen" class="reminder-form" @submit.prevent="saveReminder">
+      <form
+        v-if="isFormOpen && isReminderStorageReady"
+        class="reminder-form"
+        @submit.prevent="saveReminder"
+      >
         <h2>
           {{ editingReminderId !== null ? 'Редактирование напоминания' : 'Новое напоминание' }}
         </h2>
@@ -613,8 +851,10 @@ onUnmounted(() => {
 
         <input
           id="reminder-title"
+          ref="reminderTitleInput"
           v-model="reminderTitle"
           type="text"
+          autocomplete="off"
           placeholder="Например: позвонить врачу"
         />
 
@@ -700,6 +940,63 @@ onUnmounted(() => {
         <p v-if="autoLaunchError" class="settings-error">
           {{ autoLaunchError }}
         </p>
+
+        <div class="update-settings">
+          <div class="settings-info">
+            <strong>Обновления</strong>
+
+            <span>Текущая версия: {{ updateStatus.currentVersion }}</span>
+
+            <span>{{ updateStatusText }}</span>
+          </div>
+
+          <progress
+            v-if="updateStatus.state === 'downloading'"
+            class="update-progress"
+            max="100"
+            :value="updateStatus.percent ?? 0"
+          ></progress>
+
+          <button
+            v-if="updateStatus.state === 'available'"
+            type="button"
+            class="update-button"
+            @click="downloadUpdate"
+          >
+            Скачать обновление
+          </button>
+
+          <button
+            v-else-if="updateStatus.state === 'downloaded'"
+            type="button"
+            class="update-button"
+            @click="installUpdate"
+          >
+            Перезапустить и установить
+          </button>
+
+          <button
+            v-else-if="updateStatus.state !== 'downloading'"
+            type="button"
+            class="update-button update-button--secondary"
+            :disabled="updateStatus.state === 'checking'"
+            @click="checkForUpdates"
+          >
+            Проверить обновления
+          </button>
+
+          <p v-if="updateActionError" class="settings-error">
+            {{ updateActionError }}
+          </p>
+        </div>
+
+        <p v-if="reminderStorageNotice" class="settings-notice">
+          {{ reminderStorageNotice }}
+        </p>
+
+        <p v-if="reminderStorageError" class="settings-error">
+          {{ reminderStorageError }}
+        </p>
       </section>
     </section>
   </main>
@@ -758,6 +1055,11 @@ button {
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .reminder-list {
@@ -1006,6 +1308,37 @@ button {
 .settings-error {
   margin: 12px 0 0;
   color: #b91c1c;
+  font-size: 14px;
+}
+
+.update-settings {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.update-progress {
+  width: 100%;
+  height: 10px;
+  accent-color: #7c3aed;
+}
+
+.update-button {
+  width: fit-content;
+  padding: 9px 14px;
+  font-size: 13px;
+}
+
+.update-button--secondary {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.settings-notice {
+  margin: 12px 0 0;
+  color: #166534;
   font-size: 14px;
 }
 

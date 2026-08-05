@@ -8,6 +8,37 @@ type ReminderNotification = {
   time: string
 }
 
+type ReminderRepeat = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
+
+type StoredReminder = {
+  id: number
+  title: string
+  date: string
+  time: string
+  completed?: boolean
+  repeat?: ReminderRepeat
+  repeatDay?: number
+  repeatMonth?: number
+  repeatWeekdays?: number[]
+}
+
+type ReminderLoadResult = {
+  initialized: boolean
+  recoveredFromBackup: boolean
+  reminders: StoredReminder[]
+}
+
+type UpdateState =
+  'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'
+
+type UpdateStatus = {
+  state: UpdateState
+  currentVersion: string
+  availableVersion?: string
+  percent?: number
+  message?: string
+}
+
 const api = {
   showReminder: (reminder: ReminderNotification): void => {
     ipcRenderer.send('show-reminder', reminder)
@@ -35,6 +66,42 @@ const api = {
 
   setAutoLaunch: (enabled: boolean): Promise<boolean> => {
     return ipcRenderer.invoke('set-auto-launch', enabled)
+  },
+
+  loadReminders: (): Promise<ReminderLoadResult> => {
+    return ipcRenderer.invoke('load-reminders')
+  },
+
+  saveReminders: (reminders: StoredReminder[]): Promise<void> => {
+    return ipcRenderer.invoke('save-reminders', reminders)
+  },
+
+  getUpdateStatus: (): Promise<UpdateStatus> => {
+    return ipcRenderer.invoke('get-update-status')
+  },
+
+  checkForUpdates: (): Promise<void> => {
+    return ipcRenderer.invoke('check-for-updates')
+  },
+
+  downloadUpdate: (): Promise<void> => {
+    return ipcRenderer.invoke('download-update')
+  },
+
+  installUpdate: (): Promise<void> => {
+    return ipcRenderer.invoke('install-update')
+  },
+
+  onUpdateStatus: (callback: (status: UpdateStatus) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, status: UpdateStatus): void => {
+      callback(status)
+    }
+
+    ipcRenderer.on('update-status-changed', listener)
+
+    return () => {
+      ipcRenderer.removeListener('update-status-changed', listener)
+    }
   }
 }
 
