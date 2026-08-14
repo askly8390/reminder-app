@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { buildCalendarDays, type CalendarDay } from './calendar'
 
 type ReminderRepeat = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
 
@@ -16,6 +17,8 @@ type Reminder = {
 }
 
 type ReminderFilter = 'all' | 'active' | 'completed'
+
+type AppView = 'list' | 'calendar'
 
 type UpdateState =
   'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'
@@ -45,6 +48,10 @@ const weekDays = [
   { value: 6, label: 'Сб', title: 'Суббота' },
   { value: 0, label: 'Вс', title: 'Воскресенье' }
 ] as const
+
+const calendarWeekDays = weekDays.map((day) => day.label)
+const COLLAPSED_REMINDER_COUNT = 5
+const CALENDAR_VISIBLE_OCCURRENCE_COUNT = 3
 
 const getReminderRepeat = (reminder: Reminder): ReminderRepeat => {
   return reminder.repeat ?? 'none'
@@ -281,14 +288,16 @@ const reminderStorageError = ref('')
 const reminderStorageNotice = ref('')
 
 const reminderFilter = ref<ReminderFilter>('all')
-
 const reminderSearchQuery = ref('')
+const activeView = ref<AppView>('list')
+const isReminderListExpanded = ref(false)
+const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 const isAutoLaunchEnabled = ref(false)
 const isAutoLaunchLoading = ref(true)
 const autoLaunchError = ref('')
 const updateStatus = ref<UpdateStatus>({
   state: 'idle',
-  currentVersion: '1.2.1'
+  currentVersion: '1.3.0'
 })
 const updateActionError = ref('')
 
@@ -351,6 +360,33 @@ const filteredReminders = computed(() => {
 
       return firstDateTime - secondDateTime
     })
+})
+
+const visibleReminders = computed(() => {
+  if (isReminderListExpanded.value) {
+    return filteredReminders.value
+  }
+
+  return filteredReminders.value.slice(0, COLLAPSED_REMINDER_COUNT)
+})
+
+const hiddenReminderCount = computed(() => {
+  return Math.max(0, filteredReminders.value.length - visibleReminders.value.length)
+})
+
+const calendarMonthLabel = computed(() => {
+  const monthName = new Intl.DateTimeFormat('ru-RU', { month: 'long' }).format(calendarMonth.value)
+  const capitalizedMonthName = monthName.charAt(0).toUpperCase() + monthName.slice(1)
+
+  return `${capitalizedMonthName}, ${calendarMonth.value.getFullYear()}`
+})
+
+const calendarDays = computed<CalendarDay<Reminder>[]>(() => {
+  return buildCalendarDays(calendarMonth.value, reminders.value, CALENDAR_VISIBLE_OCCURRENCE_COUNT)
+})
+
+watch([reminderFilter, reminderSearchQuery], () => {
+  isReminderListExpanded.value = false
 })
 
 watch(
@@ -439,6 +475,29 @@ const openNewReminderForm = (): void => {
   closeForm()
   isFormOpen.value = true
   void focusReminderTitle()
+}
+
+const openNewReminderFromCalendar = (): void => {
+  activeView.value = 'list'
+  openNewReminderForm()
+}
+
+const toggleReminderList = (): void => {
+  isReminderListExpanded.value = !isReminderListExpanded.value
+}
+
+const changeCalendarMonth = (offset: number): void => {
+  calendarMonth.value = new Date(
+    calendarMonth.value.getFullYear(),
+    calendarMonth.value.getMonth() + offset,
+    1
+  )
+}
+
+const showCurrentMonth = (): void => {
+  const today = new Date()
+
+  calendarMonth.value = new Date(today.getFullYear(), today.getMonth(), 1)
 }
 
 const closeForm = (): void => {
@@ -563,6 +622,11 @@ const editReminder = (reminder: Reminder): void => {
     getReminderRepeat(reminder) === 'weekly' ? getReminderWeekdays(reminder) : []
   isFormOpen.value = true
   void focusReminderTitle()
+}
+
+const editReminderFromCalendar = (reminder: Reminder): void => {
+  activeView.value = 'list'
+  editReminder(reminder)
 }
 
 const checkReminders = (): void => {
@@ -730,273 +794,437 @@ onUnmounted(() => {
     </section>
   </main>
 
-  <main v-else class="app">
-    <section class="welcome-card">
-      <p class="label">REMINDER APP</p>
+  <main
+    v-else
+    :class="[
+      'app',
+      {
+        'app--calendar': activeView === 'calendar'
+      }
+    ]"
+  >
+    <section
+      :class="[
+        'welcome-card',
+        {
+          'welcome-card--calendar': activeView === 'calendar'
+        }
+      ]"
+    >
+      <header class="app-heading">
+        <p class="label">REMINDER APP</p>
 
-      <h1>Напоминания</h1>
+        <h1>Напоминания</h1>
+      </header>
 
-      <p v-if="isReminderStorageLoading" class="empty-state">Загрузка напоминаний...</p>
-
-      <p v-else-if="filteredReminders.length === 0" class="empty-state">Напоминания не найдены</p>
-
-      <ul v-else class="reminder-list">
-        <li
-          v-for="reminder in filteredReminders"
-          :key="reminder.id"
-          :class="[
-            'reminder-item',
-            {
-              'reminder-item--completed': reminder.completed
-            }
-          ]"
-        >
-          <div class="reminder-info">
-            <strong class="reminder-title">
-              {{ reminder.title }}
-            </strong>
-
-            <span class="reminder-date">
-              {{ reminder.date }}
-              в
-              {{ reminder.time }}
-            </span>
-
-            <span v-if="getReminderRepeat(reminder) !== 'none'" class="reminder-repeat">
-              {{ getReminderRepeatLabel(reminder) }}
-            </span>
-          </div>
-
-          <div class="reminder-actions">
-            <button
-              type="button"
-              :disabled="!isReminderStorageReady"
-              @click="toggleReminderCompleted(reminder)"
-            >
-              {{ reminder.completed ? 'Вернуть в работу' : 'Выполнено' }}
-            </button>
-
-            <button
-              type="button"
-              :disabled="!isReminderStorageReady"
-              @click="editReminder(reminder)"
-            >
-              Редактировать
-            </button>
-
-            <button
-              type="button"
-              :disabled="!isReminderStorageReady"
-              @click="deleteReminder(reminder.id)"
-            >
-              Удалить
-            </button>
-          </div>
-        </li>
-      </ul>
-
-      <button type="button" :disabled="!isReminderStorageReady" @click="openNewReminderForm">
-        Добавить напоминание
-      </button>
-
-      <div class="reminder-filters">
+      <nav class="view-switcher" aria-label="Режим отображения">
         <button
           type="button"
           :class="{
-            active: reminderFilter === 'all'
+            active: activeView === 'list'
           }"
-          @click="reminderFilter = 'all'"
+          :aria-pressed="activeView === 'list'"
+          @click="activeView = 'list'"
         >
-          Все
+          Список
         </button>
 
         <button
           type="button"
           :class="{
-            active: reminderFilter === 'active'
+            active: activeView === 'calendar'
           }"
-          @click="reminderFilter = 'active'"
+          :aria-pressed="activeView === 'calendar'"
+          @click="activeView = 'calendar'"
         >
-          Активные
+          Календарь
         </button>
+      </nav>
+
+      <section v-if="activeView === 'list'" class="list-view">
+        <p v-if="isReminderStorageLoading" class="empty-state">Загрузка напоминаний...</p>
+
+        <p v-else-if="filteredReminders.length === 0" class="empty-state">Напоминания не найдены</p>
+
+        <ul v-else class="reminder-list">
+          <li
+            v-for="reminder in visibleReminders"
+            :key="reminder.id"
+            :class="[
+              'reminder-item',
+              {
+                'reminder-item--completed': reminder.completed
+              }
+            ]"
+          >
+            <div class="reminder-info">
+              <strong class="reminder-title">
+                {{ reminder.title }}
+              </strong>
+
+              <span class="reminder-date">
+                {{ reminder.date }}
+                в
+                {{ reminder.time }}
+              </span>
+
+              <span v-if="getReminderRepeat(reminder) !== 'none'" class="reminder-repeat">
+                {{ getReminderRepeatLabel(reminder) }}
+              </span>
+            </div>
+
+            <div class="reminder-actions">
+              <button
+                type="button"
+                :disabled="!isReminderStorageReady"
+                @click="toggleReminderCompleted(reminder)"
+              >
+                {{ reminder.completed ? 'Вернуть в работу' : 'Выполнено' }}
+              </button>
+
+              <button
+                type="button"
+                :disabled="!isReminderStorageReady"
+                @click="editReminder(reminder)"
+              >
+                Редактировать
+              </button>
+
+              <button
+                type="button"
+                :disabled="!isReminderStorageReady"
+                @click="deleteReminder(reminder.id)"
+              >
+                Удалить
+              </button>
+            </div>
+          </li>
+        </ul>
 
         <button
+          v-if="filteredReminders.length > COLLAPSED_REMINDER_COUNT"
           type="button"
-          :class="{
-            active: reminderFilter === 'completed'
-          }"
-          @click="reminderFilter = 'completed'"
+          class="reminder-list-toggle"
+          :aria-expanded="isReminderListExpanded"
+          @click="toggleReminderList"
         >
-          Выполненные
+          <span>
+            {{ isReminderListExpanded ? 'Свернуть' : `Развернуть (${hiddenReminderCount})` }}
+          </span>
+
+          <span
+            :class="[
+              'reminder-list-toggle__arrow',
+              {
+                'reminder-list-toggle__arrow--expanded': isReminderListExpanded
+              }
+            ]"
+            aria-hidden="true"
+          >
+            ↓
+          </span>
         </button>
-      </div>
 
-      <input
-        v-model.trim="reminderSearchQuery"
-        class="reminder-search"
-        type="search"
-        placeholder="Поиск напоминаний"
-      />
+        <button type="button" :disabled="!isReminderStorageReady" @click="openNewReminderForm">
+          Добавить напоминание
+        </button>
 
-      <form
-        v-if="isFormOpen && isReminderStorageReady"
-        class="reminder-form"
-        @submit.prevent="saveReminder"
-      >
-        <h2>
-          {{ editingReminderId !== null ? 'Редактирование напоминания' : 'Новое напоминание' }}
-        </h2>
+        <div class="reminder-filters">
+          <button
+            type="button"
+            :class="{
+              active: reminderFilter === 'all'
+            }"
+            @click="reminderFilter = 'all'"
+          >
+            Все
+          </button>
 
-        <label for="reminder-title"> Название </label>
+          <button
+            type="button"
+            :class="{
+              active: reminderFilter === 'active'
+            }"
+            @click="reminderFilter = 'active'"
+          >
+            Активные
+          </button>
+
+          <button
+            type="button"
+            :class="{
+              active: reminderFilter === 'completed'
+            }"
+            @click="reminderFilter = 'completed'"
+          >
+            Выполненные
+          </button>
+        </div>
 
         <input
-          id="reminder-title"
-          ref="reminderTitleInput"
-          v-model="reminderTitle"
-          type="text"
-          autocomplete="off"
-          placeholder="Например: позвонить врачу"
+          v-model.trim="reminderSearchQuery"
+          class="reminder-search"
+          type="search"
+          placeholder="Поиск напоминаний"
         />
 
-        <label for="reminder-date"> Дата </label>
+        <form
+          v-if="isFormOpen && isReminderStorageReady"
+          class="reminder-form"
+          @submit.prevent="saveReminder"
+        >
+          <h2>
+            {{ editingReminderId !== null ? 'Редактирование напоминания' : 'Новое напоминание' }}
+          </h2>
 
-        <input id="reminder-date" v-model="reminderDate" type="date" />
+          <label for="reminder-title"> Название </label>
 
-        <label for="reminder-time"> Время </label>
+          <input
+            id="reminder-title"
+            ref="reminderTitleInput"
+            v-model="reminderTitle"
+            type="text"
+            autocomplete="off"
+            placeholder="Например: позвонить врачу"
+          />
 
-        <input id="reminder-time" v-model="reminderTime" type="time" />
+          <label for="reminder-date"> Дата </label>
 
-        <label for="reminder-repeat"> Повторение </label>
+          <input id="reminder-date" v-model="reminderDate" type="date" />
 
-        <select id="reminder-repeat" v-model="reminderRepeat">
-          <option value="none">Не повторять</option>
+          <label for="reminder-time"> Время </label>
 
-          <option value="daily">Ежедневно</option>
+          <input id="reminder-time" v-model="reminderTime" type="time" />
 
-          <option value="weekly">По дням недели</option>
+          <label for="reminder-repeat"> Повторение </label>
 
-          <option value="monthly">Ежемесячно</option>
+          <select id="reminder-repeat" v-model="reminderRepeat">
+            <option value="none">Не повторять</option>
 
-          <option value="yearly">Ежегодно</option>
-        </select>
+            <option value="daily">Ежедневно</option>
 
-        <fieldset v-if="reminderRepeat === 'weekly'" class="repeat-weekdays">
-          <legend>Дни недели</legend>
+            <option value="weekly">По дням недели</option>
 
-          <div class="repeat-weekdays-grid">
-            <label
-              v-for="day in weekDays"
-              :key="day.value"
-              :title="day.title"
-              :class="[
-                'repeat-weekday',
-                {
-                  'repeat-weekday--active': reminderWeekdays.includes(day.value)
-                }
-              ]"
+            <option value="monthly">Ежемесячно</option>
+
+            <option value="yearly">Ежегодно</option>
+          </select>
+
+          <fieldset v-if="reminderRepeat === 'weekly'" class="repeat-weekdays">
+            <legend>Дни недели</legend>
+
+            <div class="repeat-weekdays-grid">
+              <label
+                v-for="day in weekDays"
+                :key="day.value"
+                :title="day.title"
+                :class="[
+                  'repeat-weekday',
+                  {
+                    'repeat-weekday--active': reminderWeekdays.includes(day.value)
+                  }
+                ]"
+              >
+                <input v-model="reminderWeekdays" type="checkbox" :value="day.value" />
+
+                <span>{{ day.label }}</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <button type="submit">
+            {{ editingReminderId !== null ? 'Сохранить' : 'Добавить' }}
+          </button>
+
+          <button type="button" @click="closeForm">Закрыть</button>
+        </form>
+
+        <section class="settings-card">
+          <h2>Настройки</h2>
+
+          <div class="settings-row">
+            <div class="settings-info">
+              <strong> Запускать вместе с Windows </strong>
+
+              <span>
+                {{ isAutoLaunchEnabled ? 'Автозапуск включён' : 'Автозапуск выключен' }}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              class="auto-launch-toggle"
+              :class="{
+                'auto-launch-toggle--active': isAutoLaunchEnabled
+              }"
+              :aria-checked="isAutoLaunchEnabled"
+              :disabled="isAutoLaunchLoading"
+              aria-label="Запускать вместе с Windows"
+              @click="toggleAutoLaunch"
             >
-              <input v-model="reminderWeekdays" type="checkbox" :value="day.value" />
-
-              <span>{{ day.label }}</span>
-            </label>
-          </div>
-        </fieldset>
-
-        <button type="submit">
-          {{ editingReminderId !== null ? 'Сохранить' : 'Добавить' }}
-        </button>
-
-        <button type="button" @click="closeForm">Закрыть</button>
-      </form>
-
-      <section class="settings-card">
-        <h2>Настройки</h2>
-
-        <div class="settings-row">
-          <div class="settings-info">
-            <strong> Запускать вместе с Windows </strong>
-
-            <span>
-              {{ isAutoLaunchEnabled ? 'Автозапуск включён' : 'Автозапуск выключен' }}
-            </span>
+              <span class="auto-launch-toggle__thumb"></span>
+            </button>
           </div>
 
-          <button
-            type="button"
-            role="switch"
-            class="auto-launch-toggle"
-            :class="{
-              'auto-launch-toggle--active': isAutoLaunchEnabled
-            }"
-            :aria-checked="isAutoLaunchEnabled"
-            :disabled="isAutoLaunchLoading"
-            aria-label="Запускать вместе с Windows"
-            @click="toggleAutoLaunch"
-          >
-            <span class="auto-launch-toggle__thumb"></span>
-          </button>
-        </div>
-
-        <p v-if="autoLaunchError" class="settings-error">
-          {{ autoLaunchError }}
-        </p>
-
-        <div class="update-settings">
-          <div class="settings-info">
-            <strong>Обновления</strong>
-
-            <span>Текущая версия: {{ updateStatus.currentVersion }}</span>
-
-            <span>{{ updateStatusText }}</span>
-          </div>
-
-          <progress
-            v-if="updateStatus.state === 'downloading'"
-            class="update-progress"
-            max="100"
-            :value="updateStatus.percent ?? 0"
-          ></progress>
-
-          <button
-            v-if="updateStatus.state === 'available'"
-            type="button"
-            class="update-button"
-            @click="downloadUpdate"
-          >
-            Скачать обновление
-          </button>
-
-          <button
-            v-else-if="updateStatus.state === 'downloaded'"
-            type="button"
-            class="update-button"
-            @click="installUpdate"
-          >
-            Перезапустить и установить
-          </button>
-
-          <button
-            v-else-if="updateStatus.state !== 'downloading'"
-            type="button"
-            class="update-button update-button--secondary"
-            :disabled="updateStatus.state === 'checking'"
-            @click="checkForUpdates"
-          >
-            Проверить обновления
-          </button>
-
-          <p v-if="updateActionError" class="settings-error">
-            {{ updateActionError }}
+          <p v-if="autoLaunchError" class="settings-error">
+            {{ autoLaunchError }}
           </p>
+
+          <div class="update-settings">
+            <div class="settings-info">
+              <strong>Обновления</strong>
+
+              <span>Текущая версия: {{ updateStatus.currentVersion }}</span>
+
+              <span>{{ updateStatusText }}</span>
+            </div>
+
+            <progress
+              v-if="updateStatus.state === 'downloading'"
+              class="update-progress"
+              max="100"
+              :value="updateStatus.percent ?? 0"
+            ></progress>
+
+            <button
+              v-if="updateStatus.state === 'available'"
+              type="button"
+              class="update-button"
+              @click="downloadUpdate"
+            >
+              Скачать обновление
+            </button>
+
+            <button
+              v-else-if="updateStatus.state === 'downloaded'"
+              type="button"
+              class="update-button"
+              @click="installUpdate"
+            >
+              Перезапустить и установить
+            </button>
+
+            <button
+              v-else-if="updateStatus.state !== 'downloading'"
+              type="button"
+              class="update-button update-button--secondary"
+              :disabled="updateStatus.state === 'checking'"
+              @click="checkForUpdates"
+            >
+              Проверить обновления
+            </button>
+
+            <p v-if="updateActionError" class="settings-error">
+              {{ updateActionError }}
+            </p>
+          </div>
+
+          <p v-if="reminderStorageNotice" class="settings-notice">
+            {{ reminderStorageNotice }}
+          </p>
+
+          <p v-if="reminderStorageError" class="settings-error">
+            {{ reminderStorageError }}
+          </p>
+        </section>
+      </section>
+
+      <section v-else class="calendar-view" aria-label="Календарь напоминаний">
+        <header class="calendar-toolbar">
+          <div class="calendar-navigation">
+            <button
+              type="button"
+              class="calendar-navigation__button"
+              aria-label="Предыдущий месяц"
+              @click="changeCalendarMonth(-1)"
+            >
+              ‹
+            </button>
+
+            <h2>{{ calendarMonthLabel }}</h2>
+
+            <button
+              type="button"
+              class="calendar-navigation__button"
+              aria-label="Следующий месяц"
+              @click="changeCalendarMonth(1)"
+            >
+              ›
+            </button>
+          </div>
+
+          <div class="calendar-toolbar__actions">
+            <button type="button" class="calendar-today-button" @click="showCurrentMonth">
+              Сегодня
+            </button>
+
+            <button
+              type="button"
+              class="calendar-add-button"
+              :disabled="!isReminderStorageReady"
+              @click="openNewReminderFromCalendar"
+            >
+              Добавить
+            </button>
+          </div>
+        </header>
+
+        <div class="calendar-weekdays" aria-hidden="true">
+          <span v-for="dayLabel in calendarWeekDays" :key="dayLabel">
+            {{ dayLabel }}
+          </span>
         </div>
 
-        <p v-if="reminderStorageNotice" class="settings-notice">
-          {{ reminderStorageNotice }}
-        </p>
+        <div class="calendar-grid">
+          <article
+            v-for="day in calendarDays"
+            :key="day.key"
+            :class="[
+              'calendar-day',
+              {
+                'calendar-day--outside': !day.isCurrentMonth,
+                'calendar-day--today': day.isToday
+              }
+            ]"
+          >
+            <div class="calendar-day__header">
+              <time :datetime="day.key">{{ day.dayNumber }}</time>
 
-        <p v-if="reminderStorageError" class="settings-error">
-          {{ reminderStorageError }}
-        </p>
+              <span v-if="day.isToday">Сегодня</span>
+            </div>
+
+            <div class="calendar-day__occurrences">
+              <button
+                v-for="occurrence in day.visibleOccurrences"
+                :key="occurrence.key"
+                type="button"
+                :class="[
+                  'calendar-occurrence',
+                  {
+                    'calendar-occurrence--completed': occurrence.reminder.completed,
+                    'calendar-occurrence--repeating':
+                      getReminderRepeat(occurrence.reminder) !== 'none'
+                  }
+                ]"
+                :title="`${occurrence.reminder.title}, ${occurrence.reminder.time}`"
+                @click="editReminderFromCalendar(occurrence.reminder)"
+              >
+                <span class="calendar-occurrence__time">{{ occurrence.reminder.time }}</span>
+
+                <span class="calendar-occurrence__title">
+                  {{ occurrence.reminder.title }}
+                </span>
+              </button>
+
+              <span v-if="day.hiddenOccurrenceCount > 0" class="calendar-day__more">
+                +{{ day.hiddenOccurrenceCount }} ещё
+              </span>
+            </div>
+          </article>
+        </div>
+
+        <p v-if="isReminderStorageLoading" class="calendar-loading">Загрузка напоминаний...</p>
       </section>
     </section>
   </main>
@@ -1015,6 +1243,13 @@ onUnmounted(() => {
   font-family: 'Segoe UI', sans-serif;
 }
 
+.app--calendar {
+  height: 100vh;
+  min-height: 0;
+  padding: 12px;
+  overflow: hidden;
+}
+
 .welcome-card {
   width: 100%;
   max-width: 960px;
@@ -1025,6 +1260,26 @@ onUnmounted(() => {
   background: #ffffff;
   box-shadow: 0 16px 40px rgb(0 0 0 / 10%);
   text-align: center;
+}
+
+.welcome-card--calendar {
+  height: calc(100vh - 24px);
+  max-width: 1280px;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 16px;
+  overflow: hidden;
+}
+
+.app-heading {
+  flex: 0 0 auto;
+}
+
+.welcome-card--calendar .app-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
 }
 
 .label {
@@ -1038,6 +1293,16 @@ onUnmounted(() => {
 h1 {
   margin: 0 0 12px;
   font-size: 36px;
+}
+
+.welcome-card--calendar h1 {
+  margin-bottom: 4px;
+  font-size: 26px;
+}
+
+.welcome-card--calendar .label {
+  margin-bottom: 4px;
+  font-size: 11px;
 }
 
 .welcome-card > p:not(.label) {
@@ -1062,6 +1327,43 @@ button:disabled {
   opacity: 0.55;
 }
 
+.view-switcher {
+  width: min(100%, 360px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin: 4px auto 20px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #e2e8f0;
+}
+
+.view-switcher button {
+  padding: 9px 14px;
+  background: transparent;
+  color: #475569;
+  font-size: 14px;
+}
+
+.view-switcher button.active {
+  background: #ffffff;
+  color: #6d28d9;
+  box-shadow: 0 2px 7px rgb(15 23 42 / 12%);
+}
+
+.welcome-card--calendar .view-switcher {
+  width: 300px;
+  margin: 2px auto 10px;
+}
+
+.welcome-card--calendar .view-switcher button {
+  padding: 6px 12px;
+}
+
+.list-view {
+  min-width: 0;
+}
+
 .reminder-list {
   display: grid;
   gap: 12px;
@@ -1069,6 +1371,35 @@ button:disabled {
   padding: 0;
   list-style: none;
   text-align: left;
+}
+
+.reminder-list-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: -8px 0 16px;
+  padding: 9px 16px;
+  border: 1px solid #ddd6fe;
+  background: #f5f3ff;
+  color: #6d28d9;
+  font-size: 14px;
+}
+
+.reminder-list-toggle:hover {
+  background: #ede9fe;
+}
+
+.reminder-list-toggle__arrow {
+  display: inline-block;
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.reminder-list-toggle__arrow--expanded {
+  transform: rotate(180deg);
 }
 
 .reminder-item {
@@ -1238,6 +1569,222 @@ button:disabled {
   background: #f8fafc;
   color: #64748b;
   text-align: center;
+}
+
+.calendar-view {
+  position: relative;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  text-align: left;
+}
+
+.calendar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.calendar-navigation,
+.calendar-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-navigation h2 {
+  min-width: 190px;
+  margin: 0;
+  color: #0f172a;
+  font-size: 20px;
+  text-align: center;
+}
+
+.calendar-navigation .calendar-navigation__button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0 0 3px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.calendar-navigation .calendar-navigation__button:hover,
+.calendar-today-button:hover {
+  border-color: #a78bfa;
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.calendar-toolbar .calendar-today-button,
+.calendar-toolbar .calendar-add-button {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.calendar-toolbar .calendar-today-button {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border: 1px solid #d8dee8;
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.calendar-weekdays span {
+  padding: 5px 6px;
+  border-right: 1px solid #d8dee8;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.calendar-weekdays span:last-child {
+  border-right: 0;
+}
+
+.calendar-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  border-top: 1px solid #d8dee8;
+  border-left: 1px solid #d8dee8;
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.calendar-day {
+  min-width: 0;
+  min-height: 0;
+  padding: 4px;
+  border-right: 1px solid #d8dee8;
+  border-bottom: 1px solid #d8dee8;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.calendar-day--outside {
+  background: #f8fafc;
+}
+
+.calendar-day--today {
+  background: #faf5ff;
+  box-shadow: inset 0 0 0 2px #8b5cf6;
+}
+
+.calendar-day__header {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 2px;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.calendar-day--outside .calendar-day__header {
+  color: #94a3b8;
+}
+
+.calendar-day__header span {
+  min-width: 0;
+  color: #7c3aed;
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-day__occurrences {
+  min-height: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.calendar-day__occurrences .calendar-occurrence {
+  min-width: 0;
+  height: 17px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px;
+  border: 1px solid #ddd6fe;
+  border-left: 3px solid #8b5cf6;
+  border-radius: 4px;
+  background: #f5f3ff;
+  color: #4c1d95;
+  font-size: 10px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.calendar-day__occurrences .calendar-occurrence:hover {
+  border-color: #8b5cf6;
+  background: #ede9fe;
+}
+
+.calendar-day__occurrences .calendar-occurrence--repeating {
+  border-left-color: #2563eb;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.calendar-day__occurrences .calendar-occurrence--completed {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #64748b;
+  text-decoration: line-through;
+}
+
+.calendar-occurrence__time {
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-occurrence__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-day__more {
+  display: block;
+  padding-left: 3px;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.calendar-loading {
+  position: absolute;
+  inset: 70px 0 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 78%);
+  color: #64748b;
+  font-size: 14px;
 }
 
 .settings-card {

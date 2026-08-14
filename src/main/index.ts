@@ -525,10 +525,10 @@ function createTray(): void {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
-    minWidth: 420,
-    minHeight: 560,
+    width: 1180,
+    height: 800,
+    minWidth: 760,
+    minHeight: 650,
     show: false,
     autoHideMenuBar: true,
     icon,
